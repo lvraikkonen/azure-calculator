@@ -1,0 +1,22 @@
+import React from 'react';
+
+const QuickReplyOptions = ({ options, onSelect, label }) => {
+  return (
+    <div className="flex flex-col space-y-2">
+      <div className="text-sm text-gray-500 ml-2">{label}</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button 
+            key={option.value}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded-full text-sm"
+            onClick={() => onSelect(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default QuickReplyOptions;
