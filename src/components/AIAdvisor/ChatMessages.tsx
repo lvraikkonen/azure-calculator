@@ -4,8 +4,20 @@ import UserMessage from './UserMessage';
 import ThinkingAnimation from './ThinkingAnimation';
 import QuickReplyOptions from './QuickReplyOptions';
 import RecommendationCard from './RecommendationCard';
+import { AzureSolution, BusinessType, BusinessScale } from '../../types';
+import { useChatContext } from '../../context/ChatContext';
 
-const ChatMessages = ({ 
+interface ChatMessagesProps {
+  businessType: BusinessType;
+  businessScale: BusinessScale;
+  recommendedSolution: AzureSolution | null;
+  setBusinessType: (type: BusinessType) => void;
+  setBusinessScale: (scale: BusinessScale) => void;
+  thinking: boolean;
+  applySolution: () => void;
+}
+
+const ChatMessages: React.FC<ChatMessagesProps> = ({ 
   businessType, 
   businessScale, 
   recommendedSolution,
@@ -14,6 +26,8 @@ const ChatMessages = ({
   thinking,
   applySolution
 }) => {
+  const { currentConversation } = useChatContext();
+  
   const businessTypeOptions = [
     { value: 'web', label: 'Web应用开发' },
     { value: 'data', label: '数据处理与分析' }
@@ -24,6 +38,28 @@ const ChatMessages = ({
     { value: 'medium', label: '中型 (51-200 用户)' }
   ];
 
+  // 如果有对话历史，则显示历史消息
+  if (currentConversation && currentConversation.messages.length > 0) {
+    return (
+      <div className="flex-1 p-4 overflow-y-auto flex flex-col space-y-4" style={{height: '400px'}}>
+        {currentConversation.messages.map((message) => (
+          message.role === 'assistant' ? (
+            <AIMessage key={message.id}>
+              <p>{message.content}</p>
+            </AIMessage>
+          ) : (
+            <UserMessage key={message.id}>
+              <p>{message.content}</p>
+            </UserMessage>
+          )
+        ))}
+        
+        {thinking && <ThinkingAnimation />}
+      </div>
+    );
+  }
+
+  // 否则显示默认的引导流程
   return (
     <div className="flex-1 p-4 overflow-y-auto flex flex-col space-y-4" style={{height: '400px'}}>
       {/* AI欢迎消息 */}

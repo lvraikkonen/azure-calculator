@@ -76,3 +76,6 @@ pnpm-lock.yaml
 # 临时文件
 *.tmp
 *.bak
+.auto-coder/
+/actions/
+/output.txt

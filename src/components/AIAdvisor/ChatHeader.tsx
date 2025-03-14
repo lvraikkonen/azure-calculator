@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ChatHeader = () => {
+const ChatHeader: React.FC = () => {
   return (
     <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center">
       <div className="bg-white p-2 rounded-full mr-3">

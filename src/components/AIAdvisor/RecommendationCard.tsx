@@ -1,6 +1,15 @@
 import React from 'react';
+import { AzureSolution } from '../../types';
 
-const RecommendationCard = ({ recommendation, onApply }) => {
+interface RecommendationCardProps {
+  recommendation: AzureSolution;
+  onApply: () => void;
+}
+
+const RecommendationCard: React.FC<RecommendationCardProps> = ({ 
+  recommendation, 
+  onApply 
+}) => {
   return (
     <div className="bg-white rounded-lg p-3 border border-blue-200">
       <h3 className="font-bold text-blue-800 mb-2">{recommendation.name}</h3>

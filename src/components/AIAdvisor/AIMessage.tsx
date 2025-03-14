@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 
-const AIMessage = ({ children }) => {
+interface AIMessageProps {
+  children: ReactNode;
+}
+
+const AIMessage: React.FC<AIMessageProps> = ({ children }) => {
   return (
     <div className="flex items-start">
       <div className="bg-blue-100 rounded-lg rounded-tl-none p-3 max-w-3/4 text-gray-800">

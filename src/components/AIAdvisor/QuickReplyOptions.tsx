@@ -1,6 +1,21 @@
 import React from 'react';
 
-const QuickReplyOptions = ({ options, onSelect, label }) => {
+interface Option {
+  value: string;
+  label: string;
+}
+
+interface QuickReplyOptionsProps {
+  options: Option[];
+  onSelect: (value: any) => void;
+  label: string;
+}
+
+const QuickReplyOptions: React.FC<QuickReplyOptionsProps> = ({ 
+  options, 
+  onSelect, 
+  label 
+}) => {
   return (
     <div className="flex flex-col space-y-2">
       <div className="text-sm text-gray-500 ml-2">{label}</div>

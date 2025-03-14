@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ThinkingAnimation = () => {
+const ThinkingAnimation: React.FC = () => {
   return (
     <div className="flex items-start">
       <div className="bg-blue-100 rounded-lg rounded-tl-none p-3 max-w-3/4 flex items-center space-x-2">

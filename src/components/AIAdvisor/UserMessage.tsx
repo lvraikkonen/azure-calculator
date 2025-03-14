@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 
-const UserMessage = ({ children }) => {
+interface UserMessageProps {
+  children: ReactNode;
+}
+
+const UserMessage: React.FC<UserMessageProps> = ({ children }) => {
   return (
     <div className="flex justify-end">
       <div className="bg-blue-600 text-white rounded-lg rounded-tr-none p-3 max-w-3/4">
