@@ -6,6 +6,7 @@ import { storageService, UserSettings } from '../services/storage';
 interface AppContextType {
   // 产品相关
   selectedProducts: SelectedProduct[];
+  setSelectedProducts: React.Dispatch<React.SetStateAction<SelectedProduct[]>>;
   addProduct: (product: AzureProduct) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   removeProduct: (productId: string) => void;
@@ -112,6 +113,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // 提供上下文值
   const contextValue: AppContextType = {
     selectedProducts,
+    setSelectedProducts,
     addProduct,
     updateQuantity,
     removeProduct,

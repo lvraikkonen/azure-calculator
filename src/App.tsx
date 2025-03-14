@@ -28,6 +28,7 @@ const AppContent: React.FC = () => {
     setActiveTab, 
     isSmallScreen,
     selectedProducts, 
+    setSelectedProducts,
     totalMonthly,
     updateQuantity,
     removeProduct
@@ -46,7 +47,10 @@ const AppContent: React.FC = () => {
           {activeTab === 'calculator' ? (
             <ProductCalculator />
           ) : (
-            <AIAdvisor />
+            <AIAdvisor 
+              setSelectedProducts={setSelectedProducts}
+              setActiveTab={setActiveTab}
+            />
           )}
         </div>
         

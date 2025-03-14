@@ -3,12 +3,20 @@ import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 import { aiSolutions, azureProducts } from '../../data/azureProducts';
+import { BusinessType, BusinessScale, AzureSolution, SelectedProduct } from '../../types';
+import { useChatContext } from '../../context/ChatContext';
 
-const AIAdvisor = ({ setSelectedProducts, setActiveTab }) => {
-  const [businessType, setBusinessType] = useState('');
-  const [businessScale, setBusinessScale] = useState('');
-  const [recommendedSolution, setRecommendedSolution] = useState(null);
+interface AIAdvisorProps {
+  setSelectedProducts: React.Dispatch<React.SetStateAction<SelectedProduct[]>>;
+  setActiveTab: (tab: string) => void;
+}
+
+const AIAdvisor: React.FC<AIAdvisorProps> = ({ setSelectedProducts, setActiveTab }) => {
+  const [businessType, setBusinessType] = useState<BusinessType>('');
+  const [businessScale, setBusinessScale] = useState<BusinessScale>('');
+  const [recommendedSolution, setRecommendedSolution] = useState<AzureSolution | null>(null);
   const [thinking, setThinking] = useState(false);
+  const { sendMessage } = useChatContext();
   
   // 获取AI推荐解决方案
   const getRecommendation = useCallback(() => {
@@ -19,7 +27,7 @@ const AIAdvisor = ({ setSelectedProducts, setActiveTab }) => {
     // 模拟API调用的延迟
     setTimeout(() => {
       const key = `${businessType}-${businessScale}`;
-      setRecommendedSolution(aiSolutions[key] || null);
+      setRecommendedSolution(aiSolutions[key as keyof typeof aiSolutions] || null);
       setThinking(false);
     }, 1500);
   }, [businessType, businessScale]);
@@ -53,6 +61,11 @@ const AIAdvisor = ({ setSelectedProducts, setActiveTab }) => {
     setActiveTab('calculator');
   };
 
+  // ChatInput 需要的发送消息处理函数
+  const handleSendMessage = (message: string) => {
+    sendMessage(message);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md h-full border border-gray-200 flex flex-col">
       <ChatHeader />
@@ -67,7 +80,7 @@ const AIAdvisor = ({ setSelectedProducts, setActiveTab }) => {
         applySolution={applySolution}
       />
       
-      <ChatInput />
+      <ChatInput onSendMessage={handleSendMessage} />
     </div>
   );
 };
