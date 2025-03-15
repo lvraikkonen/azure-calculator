@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
-import { aiSolutions, azureProducts } from '../../data/azureProducts';
-import { BusinessType, BusinessScale, AzureSolution, SelectedProduct } from '../../types';
+import { azureProducts } from '../../data/azureProducts';
+import { SelectedProduct } from '../../types';
 import { useChatContext } from '../../context/ChatContext';
 
 interface AIAdvisorProps {
@@ -12,33 +12,25 @@ interface AIAdvisorProps {
 }
 
 const AIAdvisor: React.FC<AIAdvisorProps> = ({ setSelectedProducts, setActiveTab }) => {
-  const [businessType, setBusinessType] = useState<BusinessType>('');
-  const [businessScale, setBusinessScale] = useState<BusinessScale>('');
-  const [recommendedSolution, setRecommendedSolution] = useState<AzureSolution | null>(null);
-  const [thinking, setThinking] = useState(false);
-  const { sendMessage } = useChatContext();
+  const { 
+    businessType, 
+    businessScale, 
+    recommendedSolution, 
+    setBusinessType, 
+    setBusinessScale,
+    thinking, 
+    streaming,
+    currentConversation,
+    createNewConversation
+  } = useChatContext();
   
-  // 获取AI推荐解决方案
-  const getRecommendation = useCallback(() => {
-    if (!businessType || !businessScale) return;
-    
-    setThinking(true);
-    
-    // 模拟API调用的延迟
-    setTimeout(() => {
-      const key = `${businessType}-${businessScale}`;
-      setRecommendedSolution(aiSolutions[key as keyof typeof aiSolutions] || null);
-      setThinking(false);
-    }, 1500);
-  }, [businessType, businessScale]);
-  
-  // 监听业务类型和规模变化，自动获取推荐
+  // 组件挂载时初始化对话（如果还没有）
   useEffect(() => {
-    if (businessType && businessScale) {
-      getRecommendation();
+    if (!currentConversation) {
+      createNewConversation();
     }
-  }, [businessType, businessScale, getRecommendation]);
-
+  }, [currentConversation, createNewConversation]);
+  
   // 应用推荐解决方案
   const applySolution = () => {
     if (!recommendedSolution) return;
@@ -61,14 +53,9 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ setSelectedProducts, setActiveTab
     setActiveTab('calculator');
   };
 
-  // ChatInput 需要的发送消息处理函数
-  const handleSendMessage = (message: string) => {
-    sendMessage(message);
-  };
-
   return (
     <div className="bg-white rounded-lg shadow-md h-full border border-gray-200 flex flex-col">
-      <ChatHeader />
+      <ChatHeader isStreaming={streaming} />
       
       <ChatMessages 
         businessType={businessType}
@@ -77,10 +64,11 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ setSelectedProducts, setActiveTab
         setBusinessType={setBusinessType}
         setBusinessScale={setBusinessScale}
         thinking={thinking}
+        streaming={streaming}
         applySolution={applySolution}
       />
       
-      <ChatInput onSendMessage={handleSendMessage} />
+      <ChatInput useStreaming={true} />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import AIMessage from './AIMessage';
 import UserMessage from './UserMessage';
 import ThinkingAnimation from './ThinkingAnimation';
@@ -14,6 +14,7 @@ interface ChatMessagesProps {
   setBusinessType: (type: BusinessType) => void;
   setBusinessScale: (scale: BusinessScale) => void;
   thinking: boolean;
+  streaming: boolean;
   applySolution: () => void;
 }
 
@@ -24,9 +25,11 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   setBusinessType,
   setBusinessScale,
   thinking,
+  streaming,
   applySolution
 }) => {
   const { currentConversation } = useChatContext();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const businessTypeOptions = [
     { value: 'web', label: 'Web应用开发' },
@@ -38,13 +41,23 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
     { value: 'medium', label: '中型 (51-200 用户)' }
   ];
 
+  // 自动滚动到最新消息
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // 当消息发生变化或者正在流式响应时滚动到底部
+  useEffect(() => {
+    scrollToBottom();
+  }, [currentConversation, streaming]);
+
   // 如果有对话历史，则显示历史消息
   if (currentConversation && currentConversation.messages.length > 0) {
     return (
       <div className="flex-1 p-4 overflow-y-auto flex flex-col space-y-4" style={{height: '400px'}}>
         {currentConversation.messages.map((message) => (
           message.role === 'assistant' ? (
-            <AIMessage key={message.id}>
+            <AIMessage key={message.id} isStreaming={streaming && message === currentConversation.messages[currentConversation.messages.length - 1]}>
               <p>{message.content}</p>
             </AIMessage>
           ) : (
@@ -55,6 +68,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
         ))}
         
         {thinking && <ThinkingAnimation />}
+        <div ref={messagesEndRef} />
       </div>
     );
   }
@@ -119,6 +133,8 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
           <p className="mt-3">这个方案能满足你的需求吗？你也可以在应用后在产品计算器中进一步调整。</p>
         </AIMessage>
       )}
+      
+      <div ref={messagesEndRef} />
     </div>
   );
 };

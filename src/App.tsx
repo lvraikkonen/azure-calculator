@@ -4,20 +4,26 @@ import TabNavigation from './components/TabNavigation/TabNavigation';
 import ProductCalculator from './components/ProductCalculator/ProductCalculator';
 import AIAdvisor from './components/AIAdvisor/AIAdvisor';
 import SummaryPanel from './components/SummaryPanel/SummaryPanel';
+import PrivateRoute from './components/Auth/PrivateRoute';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { ChatProvider } from './context/ChatContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 
 // 主应用组件包装器
 const App: React.FC = () => {
   return (
-    <AppProvider>
-      <ThemeProvider>
-        <ChatProvider>
-          <AppContent />
-        </ChatProvider>
-      </ThemeProvider>
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <ThemeProvider>
+          <ChatProvider>
+            <PrivateRoute>
+              <AppContent />
+            </PrivateRoute>
+          </ChatProvider>
+        </ThemeProvider>
+      </AppProvider>
+    </AuthProvider>
   );
 };
 
