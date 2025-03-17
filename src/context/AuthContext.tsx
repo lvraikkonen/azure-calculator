@@ -1,5 +1,3 @@
-// src/context/AuthContext.tsx
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, mockLogin, LoginRequest, AuthError } from '../services/auth';
 import { storageService } from '../services/storage';
@@ -44,29 +42,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (token) {
         try {
-          // 为简单起见，我们直接根据token存在设置用户信息
-          // 理想情况下，应该调用后端API验证token并获取用户信息
-          setUser({
-            id: '1',
-            username: 'admin',
-            email: 'admin@example.com'
-          });
+          // 获取存储的用户信息
+          const storedUser = storageService.getUserInfo();
           
-          // 如果需要验证token或获取用户信息，可以在这里添加API调用
-          // const response = await fetch(`${API_BASE_URL}/auth/me`, {
-          //   headers: { Authorization: `Bearer ${token}` }
-          // });
-          // if (response.ok) {
-          //   const userData = await response.json();
-          //   setUser(userData);
-          // } else {
-          //   // Token无效，清除存储
-          //   storageService.clearAuthToken();
-          // }
+          if (storedUser) {
+            // 使用存储的用户信息
+            setUser(storedUser);
+          } else {
+            // 如果没有存储的用户信息，尝试从后端获取
+            try {
+              // 调用/auth/me端点获取用户信息
+              const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              
+              if (response.ok) {
+                const userData = await response.json();
+                setUser(userData);
+                // 保存用户信息到本地存储
+                storageService.saveUserInfo(userData);
+              } else {
+                // Token无效，清除存储
+                storageService.clearAuthToken();
+                storageService.clearUserInfo();
+              }
+            } catch (error) {
+              console.error('获取用户信息失败:', error);
+              // 在开发环境中使用默认用户以便测试
+              if (isDevelopment) {
+                setUser({
+                  id: '1',
+                  username: 'admin',
+                  email: 'admin@example.com'
+                });
+              } else {
+                // 生产环境中清除令牌
+                storageService.clearAuthToken();
+                storageService.clearUserInfo();
+              }
+            }
+          }
         } catch (error) {
           console.error('验证token失败:', error);
           // 错误时清除token
           storageService.clearAuthToken();
+          storageService.clearUserInfo();
         }
       }
       
@@ -80,12 +100,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'auth_token' && e.newValue !== null) {
-        // Token被添加或更改
-        setUser({
-          id: '1',
-          username: 'admin',
-          email: 'admin@example.com'
-        });
+        // Token被添加或更改 - 应该从localStorage中获取用户信息
+        const storedUser = storageService.getUserInfo();
+        if (storedUser) {
+          setUser(storedUser);
+        }
       } else if (e.key === 'auth_token' && e.newValue === null) {
         // Token被删除
         setUser(null);
@@ -106,6 +125,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // 尝试使用真实的后端登录API，如果FORCE_MOCK_LOGIN设置为true则使用模拟登录
       const response = await authApi.login(credentials, FORCE_MOCK_LOGIN);
+      
+      // 保存用户信息到localStorage
+      storageService.saveUserInfo(response.user);
       setUser(response.user);
       
       // 触发自定义事件，通知其他组件用户已登录
@@ -125,6 +147,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // 用户登出
   const logout = () => {
     authApi.logout();
+    storageService.clearUserInfo();
     setUser(null);
     
     // 触发自定义事件，通知其他组件用户已登出

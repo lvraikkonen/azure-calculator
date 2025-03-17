@@ -1,11 +1,13 @@
 import { SelectedProduct } from '../types';
+import { User } from '../context/AuthContext';
 
 // 本地存储键
 const STORAGE_KEYS = {
   SELECTED_PRODUCTS: 'azure_calculator_selected_products',
   ACTIVE_TAB: 'azure_calculator_active_tab',
   USER_SETTINGS: 'azure_calculator_user_settings',
-  AUTH_TOKEN: 'auth_token'
+  AUTH_TOKEN: 'auth_token',
+  USER_INFO: 'user_info'
 };
 
 // 用户设置接口
@@ -73,6 +75,27 @@ export const storageService = {
   
   clearAuthToken: (): void => {
     localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+  },
+  
+  // 用户信息持久化
+  saveUserInfo: (user: User): void => {
+    localStorage.setItem(STORAGE_KEYS.USER_INFO, JSON.stringify(user));
+  },
+  
+  getUserInfo: (): User | null => {
+    const stored = localStorage.getItem(STORAGE_KEYS.USER_INFO);
+    if (!stored) return null;
+    
+    try {
+      return JSON.parse(stored) as User;
+    } catch (error) {
+      console.error('Failed to parse user info:', error);
+      return null;
+    }
+  },
+  
+  clearUserInfo: (): void => {
+    localStorage.removeItem(STORAGE_KEYS.USER_INFO);
   },
   
   // 清除所有持久化数据

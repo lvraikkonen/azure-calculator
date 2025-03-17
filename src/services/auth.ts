@@ -1,5 +1,3 @@
-// src/services/auth.ts
-
 import { storageService } from './storage';
 
 // API基础URL配置
@@ -70,8 +68,34 @@ export const authApi = {
       
       const data = await response.json();
       
+      // 确保响应包含必要的用户数据
+      if (!data.user || !data.user.id || !data.user.username) {
+        console.warn('API响应缺少完整用户信息:', data);
+        
+        // 尝试通过额外调用获取用户信息
+        try {
+          const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${data.access_token}`
+            }
+          });
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            data.user = userData;
+          }
+        } catch (userError) {
+          console.error('获取用户信息失败:', userError);
+        }
+      }
+      
       // 保存令牌到本地存储
       storageService.saveAuthToken(data.access_token);
+      
+      // 保存用户信息到本地存储
+      if (data.user) {
+        storageService.saveUserInfo(data.user);
+      }
       
       return data;
     } catch (error) {
@@ -91,9 +115,41 @@ export const authApi = {
     }
   },
   
+  // 获取当前用户信息
+  getCurrentUser: async (): Promise<LoginResponse['user'] | null> => {
+    const token = storageService.getAuthToken();
+    if (!token) return null;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        // 如果令牌无效，清除存储
+        if (response.status === 401) {
+          storageService.clearAuthToken();
+          storageService.clearUserInfo();
+        }
+        return null;
+      }
+      
+      const userData = await response.json();
+      // 更新存储中的用户信息
+      storageService.saveUserInfo(userData);
+      return userData;
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      return null;
+    }
+  },
+  
   // 用户登出
   logout: (): void => {
     storageService.clearAuthToken();
+    storageService.clearUserInfo();
   },
   
   // 检查是否已登录
@@ -119,6 +175,9 @@ export const mockLogin = async (credentials: LoginRequest): Promise<LoginRespons
         
         // 保存令牌到本地存储
         storageService.saveAuthToken(mockResponse.access_token);
+        
+        // 保存用户信息到本地存储
+        storageService.saveUserInfo(mockResponse.user);
         
         resolve(mockResponse);
       } else {
