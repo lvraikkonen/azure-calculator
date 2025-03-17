@@ -4,6 +4,7 @@ import UserMessage from './UserMessage';
 import ThinkingAnimation from './ThinkingAnimation';
 import QuickReplyOptions from './QuickReplyOptions';
 import RecommendationCard from './RecommendationCard';
+import SuggestionChips from './SuggestionChips'; // 新增
 import { AzureSolution, BusinessType, BusinessScale } from '../../types';
 import { useChatContext } from '../../context/ChatContext';
 
@@ -28,7 +29,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   streaming,
   applySolution
 }) => {
-  const { currentConversation } = useChatContext();
+  const { currentConversation, suggestions, sendSuggestion } = useChatContext(); // 更新
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const businessTypeOptions = [
@@ -49,7 +50,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   // 当消息发生变化或者正在流式响应时滚动到底部
   useEffect(() => {
     scrollToBottom();
-  }, [currentConversation, streaming]);
+  }, [currentConversation, streaming, suggestions]); // 添加suggestions依赖
 
   // 如果有对话历史，则显示历史消息
   if (currentConversation && currentConversation.messages.length > 0) {
@@ -68,6 +69,15 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
         ))}
         
         {thinking && <ThinkingAnimation />}
+        
+        {/* 添加建议问题区域 */}
+        {!thinking && !streaming && suggestions.length > 0 && (
+          <SuggestionChips 
+            suggestions={suggestions} 
+            onSuggestionClick={sendSuggestion}
+          />
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
     );
@@ -132,6 +142,14 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
           />
           <p className="mt-3">这个方案能满足你的需求吗？你也可以在应用后在产品计算器中进一步调整。</p>
         </AIMessage>
+      )}
+      
+      {/* 建议问题区域 */}
+      {!thinking && suggestions.length > 0 && (
+        <SuggestionChips 
+          suggestions={suggestions} 
+          onSuggestionClick={sendSuggestion}
+        />
       )}
       
       <div ref={messagesEndRef} />

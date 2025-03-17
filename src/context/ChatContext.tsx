@@ -8,7 +8,8 @@ import {
   ConversationSummary,
   BusinessType,
   BusinessScale,
-  AzureSolution
+  AzureSolution,
+  ChatAPIResponse
 } from '../types';
 import { chatApi, mockResponse, mockStreamResponse, StreamHandler } from '../services/api';
 import { aiSolutions } from '../data/azureProducts';
@@ -41,9 +42,13 @@ interface ChatContextType {
   businessScale: BusinessScale;
   recommendedSolution: AzureSolution | null;
   
+  // 新增：建议相关属性
+  suggestions: string[];
+  
   // 操作函数
   sendMessage: (content: string) => Promise<void>;
   sendStreamMessage: (content: string) => Promise<void>;
+  sendSuggestion: (suggestion: string) => Promise<void>; // 新增
   setBusinessType: (type: BusinessType) => void;
   setBusinessScale: (scale: BusinessScale) => void;
   getRecommendation: () => void;
@@ -77,6 +82,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [businessScale, setBusinessScale] = useState<BusinessScale>('');
   const [recommendedSolution, setRecommendedSolution] = useState<AzureSolution | null>(null);
   
+  // 建议问题状态
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  
   // 监听API使用首选项变化
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -98,6 +106,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       cancelStreamRef.current = null;
       setStreaming(false);
     }
+  };
+  
+  // 发送建议问题
+  const sendSuggestion = async (suggestion: string) => {
+    await sendMessage(suggestion);
   };
   
   // 组件卸载时取消流式响应
@@ -328,6 +341,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       onChunk: (chunk: string) => {
         console.log('[Chat] 收到消息块:', chunk);
         
+        // 确保收到的消息块不是空字符串
+        if (chunk.trim() === '') return;
+        
         setCurrentConversation(prevConversation => {
           if (!prevConversation) return prevConversation;
           
@@ -335,6 +351,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
           
           if (assistantMessageIndex !== -1) {
+            // 直接追加消息块，不插入额外内容
             updatedMessages[assistantMessageIndex] = {
               ...updatedMessages[assistantMessageIndex],
               content: updatedMessages[assistantMessageIndex].content + chunk
@@ -353,48 +370,94 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setStreaming(false);
         cancelStreamRef.current = null;
         
-        let messageContent = fullResponse;
+        // 创建变量存储消息内容
+        let messageText = '';
         
-        // 检查是否收到了JSON响应（可能是结构化数据）
+        // 检查是否收到了JSON响应
         try {
-          // 尝试解析为JSON，如果成功则可能是特殊格式的响应
+          // 尝试解析顶层JSON
           const jsonResponse = JSON.parse(fullResponse);
           console.log('[Chat] 检测到JSON响应:', jsonResponse);
           
-          // 使用专门的函数处理推荐方案
-          messageContent = handleRecommendationResponse(jsonResponse);
-          
-          // 更新助手消息内容为处理后的内容
-          setCurrentConversation(prevConversation => {
-            if (!prevConversation) return prevConversation;
-            
-            const updatedMessages = [...prevConversation.messages];
-            const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
-            
-            if (assistantMessageIndex !== -1 && typeof messageContent === 'string') {
-              updatedMessages[assistantMessageIndex] = {
-                ...updatedMessages[assistantMessageIndex],
-                content: messageContent
-              };
+          // 首先检查是否需要解析content字段中的嵌套JSON
+          if (jsonResponse.content && typeof jsonResponse.content === 'string' && 
+              (jsonResponse.content.includes('"message"') || jsonResponse.content.includes('\"message\"'))) {
+            try {
+              // 尝试解析content字段中的JSON
+              const contentJson = JSON.parse(jsonResponse.content);
+              console.log('[Chat] 解析content中的JSON成功:', contentJson);
+              
+              // 从content中提取message
+              if (contentJson.message) {
+                messageText = contentJson.message;
+                console.log('[Chat] 从content中提取到message:', messageText);
+              }
+            } catch (contentError) {
+              console.error('[Chat] 解析content字段失败:', contentError);
             }
+          }
+          
+          // 如果内层没有找到消息，检查顶层是否有message字段
+          if (!messageText && jsonResponse.message) {
+            messageText = jsonResponse.message;
+            console.log('[Chat] 从顶层提取到message:', messageText);
+          }
+          
+          // 如果仍然没有找到message，尝试使用content字段直接作为消息
+          if (!messageText && jsonResponse.content && typeof jsonResponse.content === 'string') {
+            messageText = jsonResponse.content;
+            console.log('[Chat] 使用content作为message:', messageText);
+          }
+          
+          // 确保有消息内容才更新UI
+          if (messageText) {
+            console.log('[Chat] 使用最终消息文本更新UI:', messageText);
             
-            return {
-              ...prevConversation,
-              messages: updatedMessages
-            };
-          });
+            // 更新消息内容
+            setCurrentConversation(prevConversation => {
+              if (!prevConversation) return prevConversation;
+              
+              const updatedMessages = [...prevConversation.messages];
+              const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
+              
+              if (assistantMessageIndex !== -1) {
+                updatedMessages[assistantMessageIndex] = {
+                  ...updatedMessages[assistantMessageIndex],
+                  content: messageText
+                };
+              }
+              
+              return {
+                ...prevConversation,
+                ...(jsonResponse.conversation_id ? { id: jsonResponse.conversation_id } : {}),
+                messages: updatedMessages
+              };
+            });
+          }
+          
+          // 处理其他响应数据（推荐、建议等）
+          handleRecommendationResponse(jsonResponse);
+          
+          // 更新对话列表
+          const finalAssistantMessage = {
+            ...assistantMessage,
+            content: jsonResponse.message || fullResponse
+          };
+          
+          updateConversationsList(updatedConversation.id, updatedConversation, finalAssistantMessage);
+          
         } catch (e) {
-          // 不是JSON，使用原始响应内容
-          console.log('[Chat] 不是JSON响应，使用原始内容');
+          // 不是JSON，可能是纯文本响应
+          console.log('[Chat] 非JSON响应，保持当前消息内容');
+          
+          // 更新对话列表
+          const finalAssistantMessage = {
+            ...assistantMessage,
+            content: fullResponse
+          };
+          
+          updateConversationsList(updatedConversation.id, updatedConversation, finalAssistantMessage);
         }
-        
-        // 更新对话列表
-        const finalAssistantMessage = {
-          ...assistantMessage,
-          content: typeof messageContent === 'string' ? messageContent : fullResponse
-        };
-        
-        updateConversationsList(updatedConversation.id, updatedConversation, finalAssistantMessage);
       },
       onError: (error: Error) => {
         console.error('[Chat] 流式消息处理错误:', error);
@@ -556,70 +619,50 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // 处理推荐方案响应
-  const handleRecommendationResponse = (jsonResponse: any) => {
-    console.log('[Chat] 处理推荐方案响应:', jsonResponse);
-    
+  // handleRecommendationResponse函数
+  const handleRecommendationResponse = (jsonResponse: any): string => {
     try {
-      // 如果是JSON字符串，先解析它
+      // 确保我们在处理字符串
       const data = typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse;
       
-      // 如果存在消息内容
-      if (data.message) {
-        console.log('[Chat] 从响应中提取消息内容:', data.message);
-      }
+      // 提取文本消息
+      const messageText = data.message || '';
       
-      // 如果存在推荐方案
+      // 处理推荐方案
       if (data.recommendation) {
-        const recommendation = data.recommendation;
-        console.log('[Chat] 设置推荐方案:', recommendation);
+        setRecommendedSolution({
+          name: data.recommendation.name,
+          description: data.recommendation.description,
+          products: data.recommendation.products.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            quantity: p.quantity
+          }))
+        });
         
-        // 设置推荐方案
-        setRecommendedSolution(recommendation);
-        
-        // 根据业务类型和规模设置相应状态
-        // 根据响应内容分析业务类型和规模，这是简化逻辑，实际应根据后端返回调整
-        if (recommendation.name.includes('数据分析')) {
+        // 根据推荐自动设置业务类型和规模
+        if (data.recommendation.name.includes('数据分析')) {
           setBusinessType('data');
-          
-          // 基于方案名称或描述猜测业务规模
-          if (recommendation.name.includes('基础')) {
-            setBusinessScale('small');
-          } else {
-            setBusinessScale('medium');
-          }
-        } else if (recommendation.name.includes('Web')) {
+          setBusinessScale(data.recommendation.name.includes('初步') ? 'small' : 'medium');
+        } else if (data.recommendation.name.includes('Web')) {
           setBusinessType('web');
-          
-          // 基于方案名称或描述猜测业务规模
-          if (recommendation.name.includes('基础')) {
-            setBusinessScale('small');
-          } else {
-            setBusinessScale('medium');
-          }
+          setBusinessScale(data.recommendation.name.includes('初步') ? 'small' : 'medium');
         }
       }
       
-      // 处理可能的建议选项
+      // 处理建议问题
       if (data.suggestions && Array.isArray(data.suggestions)) {
-        console.log('[Chat] 收到建议选项:', data.suggestions);
-        // 这里可以将建议选项保存到状态中，供UI使用
+        setSuggestions(data.suggestions);
+      } else {
+        setSuggestions([]);
       }
       
-      // 如果有会话ID，更新当前会话ID
-      if (data.conversation_id && currentConversation) {
-        console.log('[Chat] 更新会话ID:', data.conversation_id);
-        // 更新会话ID
-        setCurrentConversation(prev => prev ? {
-          ...prev,
-          id: data.conversation_id
-        } : null);
-      }
-      
-      return data.message || jsonResponse;
+      // 返回消息文本，用于显示在聊天界面
+      return messageText;
     } catch (err) {
       console.error('[Chat] 处理推荐响应失败:', err);
-      return jsonResponse;
+      setSuggestions([]);
+      return typeof jsonResponse === 'string' ? jsonResponse : JSON.stringify(jsonResponse);
     }
   };
   
@@ -661,8 +704,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     businessType,
     businessScale,
     recommendedSolution,
+    suggestions,
     sendMessage,
     sendStreamMessage,
+    sendSuggestion,
     setBusinessType,
     setBusinessScale,
     getRecommendation,

@@ -78,9 +78,7 @@ export const chatApi = {
     return handleResponse<MessageResponse>(response);
   },
   
-  // 修改api.ts中的sendMessageStream方法
-
-  // 流式发送消息
+  // 修改sendMessageStream函数中的处理逻辑
   sendMessageStream: (message: MessageRequest, handler: StreamHandler): () => void => {
     let fullResponse = '';
     let abortController = new AbortController();
@@ -131,36 +129,32 @@ export const chatApi = {
           
           console.log('[API] 收到原始数据块:', chunk);
           
-          // 处理SSE格式的响应，每行以'data: '开头
+          // 处理SSE格式的响应
           const lines = responseText.split('\n');
           
-          // 处理除最后一行外的所有行，因为最后一行可能不完整
+          // 处理除最后一行外的所有行
           for (let i = 0; i < lines.length - 1; i++) {
             const line = lines[i].trim();
             
             if (line.startsWith('data: ')) {
               try {
-                // 提取data:后面的JSON字符串并解析
+                // 提取data:后面的JSON字符串
                 const jsonStr = line.substring(6);
                 console.log('[API] 解析SSE数据行:', jsonStr);
                 
+                // 尝试解析JSON
                 const eventData = JSON.parse(jsonStr);
                 
-                // 提取消息内容
-                if (eventData.content) {
-                  console.log('[API] 提取的消息内容:', eventData.content);
-                  handler.onChunk(eventData.content);
+                // 检查是否有消息文本
+                if (eventData.message) {
+                  console.log('[API] 提取的消息内容:', eventData.message);
+                  // 只发送文本部分作为块
+                  handler.onChunk(eventData.message);
                 }
                 
-                // 如果响应完成并且有完整的内容
-                if (eventData.done && eventData.content) {
-                  fullResponse += eventData.content;
-                }
-                
-                // 如果这是最后一个完整的响应
-                if (eventData.done && Object.keys(eventData).length > 2) {
-                  console.log('[API] 接收到完整响应对象:', eventData);
-                  // 传递完整的JSON字符串，而不仅仅是content
+                // 如果响应包含完整的推荐信息，作为最终响应处理
+                if (eventData.recommendation) {
+                  console.log('[API] 接收到包含推荐的完整响应');
                   fullResponse = jsonStr;
                   handler.onComplete(fullResponse);
                   return;
