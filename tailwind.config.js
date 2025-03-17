@@ -10,6 +10,8 @@ export default {
       animation: {
         'blink': 'blink 1s step-end infinite',
         'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in-out': 'fadeInOut 3s ease-in-out',
+        'highlight': 'highlight 2s ease-in-out',
       },
       keyframes: {
         blink: {
@@ -24,6 +26,16 @@ export default {
             opacity: '.5',
           },
         },
+        fadeInOut: {
+          '0%': { opacity: '0' },
+          '10%': { opacity: '1' },
+          '90%': { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
+        highlight: {
+          '0%': { backgroundColor: 'rgb(219 234 254)' }, // bg-blue-100
+          '100%': { backgroundColor: 'transparent' },
+        }
       },
     },
   },

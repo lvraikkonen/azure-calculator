@@ -63,6 +63,7 @@ export interface StreamHandler {
   onChunk: (chunk: string) => void;
   onComplete: (fullResponse: string) => void;
   onError: (error: Error) => void;
+  onStructuredData?: (data: any) => void; // 处理结构化数据(推荐、建议等)
 }
 
 // 聊天API服务
@@ -82,7 +83,7 @@ export const chatApi = {
   sendMessageStream: (message: MessageRequest, handler: StreamHandler): () => void => {
     let fullResponse = '';
     let abortController = new AbortController();
-    let responseText = '';
+    let buffer = ''; // 用于存储收到的数据块
     
     console.log('[API] 开始发送流式消息请求:', message);
     
@@ -125,48 +126,71 @@ export const chatApi = {
           
           // 解码并处理数据块
           const chunk = decoder.decode(value, { stream: true });
-          responseText += chunk;
+          fullResponse += chunk;
+          buffer += chunk;
           
-          console.log('[API] 收到原始数据块:', chunk);
+          // 处理完整的数据行
+          const lines = buffer.split('\n');
+          // 保留最后一行(可能不完整)到buffer中
+          buffer = lines.pop() || '';
           
-          // 处理SSE格式的响应
-          const lines = responseText.split('\n');
-          
-          // 处理除最后一行外的所有行
-          for (let i = 0; i < lines.length - 1; i++) {
-            const line = lines[i].trim();
-            
-            if (line.startsWith('data: ')) {
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('data: ')) {
               try {
-                // 提取data:后面的JSON字符串
-                const jsonStr = line.substring(6);
-                console.log('[API] 解析SSE数据行:', jsonStr);
+                // 提取data:后面的内容
+                const content = trimmedLine.substring(6);
+                console.log('[API] 收到SSE数据行:', content);
                 
                 // 尝试解析JSON
-                const eventData = JSON.parse(jsonStr);
-                
-                // 检查是否有消息文本
-                if (eventData.message) {
-                  console.log('[API] 提取的消息内容:', eventData.message);
-                  // 只发送文本部分作为块
-                  handler.onChunk(eventData.message);
+                try {
+                  const jsonData = JSON.parse(content);
+                  
+                  // 提取消息文本部分并发送（仅在有文本内容时）
+                  const hasTextContent = extractAndSendMessageText(jsonData, handler);
+                  
+                  // 如果有结构化数据，单独处理
+                  if (jsonData.recommendation || jsonData.suggestions || 
+                      (jsonData.content && jsonData.content.includes('"recommendation"'))) {
+                    handler.onStructuredData?.(jsonData);
+                  }
+                  
+                  // 如果既没有文本也没有结构化数据，尝试把内容当作普通文本处理
+                  if (!hasTextContent && !jsonData.recommendation && !jsonData.suggestions) {
+                    try {
+                      // 尝试检查内容是否仍然包含嵌套的消息
+                      if (typeof content === 'string' && content.includes('"message"')) {
+                        const messageMatch = content.match(/"message"\s*:\s*"([^"]*)"/);
+                        if (messageMatch && messageMatch[1]) {
+                          handler.onChunk(messageMatch[1]);
+                        }
+                      }
+                    } catch (e) {
+                      console.error('[API] 尝试提取消息失败:', e);
+                    }
+                  }
+                } catch (jsonError) {
+                  // 如果不是有效的JSON，直接发送原始内容
+                  // 但先检查是否包含JSON结构，避免显示原始JSON
+                  if (!content.startsWith('{') || !content.includes('"message"')) {
+                    handler.onChunk(content);
+                  } else {
+                    // 尝试提取message字段
+                    try {
+                      const messageMatch = content.match(/"message"\s*:\s*"([^"]*)"/);
+                      if (messageMatch && messageMatch[1]) {
+                        handler.onChunk(messageMatch[1]);
+                      }
+                    } catch (e) {
+                      // 提取失败，不发送任何内容
+                    }
+                  }
                 }
-                
-                // 如果响应包含完整的推荐信息，作为最终响应处理
-                if (eventData.recommendation) {
-                  console.log('[API] 接收到包含推荐的完整响应');
-                  fullResponse = jsonStr;
-                  handler.onComplete(fullResponse);
-                  return;
-                }
-              } catch (err) {
-                console.error('[API] 解析SSE数据行出错:', err, line);
+              } catch (e) {
+                console.error('[API] 处理数据行失败:', e);
               }
             }
           }
-          
-          // 保留最后一行为下一次拼接
-          responseText = lines[lines.length - 1];
         }
       } catch (error: unknown) {
         console.error('[API] 流式响应处理错误:', error);
@@ -177,6 +201,95 @@ export const chatApi = {
         }
       }
     })();
+    
+    // 辅助函数：从各种响应格式中提取消息文本
+    function extractAndSendMessageText(data: any, handler: StreamHandler) {
+      // 检测是否是JSON格式的字符串响应
+      if (typeof data === 'string' && data.trim().startsWith('{') && data.includes('"message"')) {
+        try {
+          // 尝试解析为JSON
+          const jsonData = JSON.parse(data);
+          // 仅发送message字段的内容
+          if (jsonData.message) {
+            handler.onChunk(jsonData.message);
+            return true;
+          }
+        } catch (e) {
+          // 解析失败，将其视为普通文本
+          handler.onChunk(data);
+          return true;
+        }
+      }
+      
+      // 如果有直接的message字段
+      if (data.message && typeof data.message === 'string') {
+        handler.onChunk(data.message);
+        return true;
+      }
+      
+      // 嵌套在content中的message
+      if (data.content && typeof data.content === 'string') {
+        try {
+          // 尝试解析content是否为JSON
+          const contentJson = JSON.parse(data.content);
+          if (contentJson.message && typeof contentJson.message === 'string') {
+            handler.onChunk(contentJson.message);
+            return true;
+          }
+        } catch (e) {
+          // 如果content不是JSON但可能包含JSON字符串
+          if (data.content.includes('{') && data.content.includes('"message"')) {
+            const jsonMatch = data.content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                const extractedJson = JSON.parse(jsonMatch[0]);
+                if (extractedJson.message) {
+                  handler.onChunk(extractedJson.message);
+                  return true;
+                }
+              } catch (err) {
+                // 解析失败，继续下一步
+              }
+            }
+          }
+          
+          // 如果上述尝试都失败，判断content是否是JSON字符串本身
+          if (data.content.startsWith('{') && data.content.endsWith('}')) {
+            // 这可能是一个完整的JSON字符串，不要直接显示
+            // 而是尝试提取其中的message字段
+            try {
+              const jsonContent = JSON.parse(data.content);
+              if (jsonContent.message) {
+                handler.onChunk(jsonContent.message);
+                return true;
+              }
+            } catch (jsonError) {
+              // JSON解析失败，可能不是有效的JSON
+            }
+          } else {
+            // 不是JSON，直接发送content作为消息
+            handler.onChunk(data.content);
+            return true;
+          }
+        }
+      }
+      
+      // 如果是完整的JSON对象但没有message字段，不显示任何内容
+      // 这种情况下可能只包含recommendation或suggestions
+      if (typeof data === 'object' && 
+          (data.recommendation || data.suggestions) && 
+          !data.message) {
+        return false;
+      }
+      
+      // 默认情况：如果是简单字符串，则直接显示
+      if (typeof data === 'string' && !data.startsWith('{')) {
+        handler.onChunk(data);
+        return true;
+      }
+      
+      return false;
+    }
     
     // 返回取消函数
     return () => {

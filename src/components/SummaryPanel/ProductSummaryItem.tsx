@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ChevronUp, ChevronDown } from 'lucide-react';
 import { SelectedProduct } from '../../types';
 import { formatPrice } from '../../services/format';
@@ -16,9 +16,26 @@ const ProductSummaryItem: React.FC<ProductSummaryItemProps> = ({
   updateQuantity
 }) => {
   const { userSettings } = useAppContext();
+  const [highlight, setHighlight] = useState(false);
+  
+  // 检测产品是否是新添加的
+  useEffect(() => {
+    if ('isNew' in product && product.isNew) {
+      setHighlight(true);
+      
+      // 2秒后移除高亮
+      const timer = setTimeout(() => {
+        setHighlight(false);
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [product]);
   
   return (
-    <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+    <div className={`flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700 transition-colors duration-500 ${
+      highlight ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+    }`}>
       <div className="flex-1">
         <div className="font-medium dark:text-white">{product.name}</div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -45,7 +62,9 @@ const ProductSummaryItem: React.FC<ProductSummaryItemProps> = ({
           </button>
         </div>
         
-        <div className="font-bold min-w-16 text-right dark:text-white">
+        <div className={`font-bold min-w-16 text-right dark:text-white ${
+          highlight ? 'text-blue-600 dark:text-blue-400' : ''
+        }`}>
           {formatPrice(product.price * product.quantity, userSettings)}
         </div>
       </div>

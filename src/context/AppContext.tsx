@@ -85,7 +85,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         p.id === product.id ? {...p, quantity: p.quantity + 1} : p
       ));
     } else {
-      setSelectedProducts([...selectedProducts, {...product, quantity: 1}]);
+      // 为新增的产品添加动画效果
+      const newProduct = {...product, quantity: 1, isNew: true};
+      setSelectedProducts([...selectedProducts, newProduct]);
+      
+      // 延时移除新产品标记
+      setTimeout(() => {
+        setSelectedProducts(prev => 
+          prev.map(p => p.id === product.id ? {...p, isNew: false} : p)
+        );
+      }, 2000);
     }
   };
   

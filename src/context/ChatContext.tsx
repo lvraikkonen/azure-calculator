@@ -1,5 +1,3 @@
-// src/context/ChatContext.tsx
-
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { 
@@ -9,7 +7,7 @@ import {
   BusinessType,
   BusinessScale,
   AzureSolution,
-  ChatAPIResponse
+  AzureSolutionProduct
 } from '../types';
 import { chatApi, mockResponse, mockStreamResponse, StreamHandler } from '../services/api';
 import { aiSolutions } from '../data/azureProducts';
@@ -298,6 +296,92 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
+  // 处理推荐方案和建议问题
+  const processStructuredData = (data: any) => {
+    let processedData = { ...data };
+    delete processedData.content; // 移除content字段，避免重复处理
+    // 提取和处理推荐方案
+    if (data.recommendation) {
+      try {
+        // 确保推荐方案格式正确
+        const recommendation: AzureSolution = {
+          name: data.recommendation.name || "Azure推荐方案",
+          description: data.recommendation.description || "基于您的需求定制的Azure云服务组合",
+          products: []
+        };
+        
+        // 处理产品列表，确保每个产品都有必要的字段
+        if (Array.isArray(data.recommendation.products)) {
+          recommendation.products = data.recommendation.products.map((product: any) => {
+            // 确保每个产品对象都有必要的字段
+            const processedProduct: AzureSolutionProduct = {
+              id: product.id || `product-${Math.random().toString(36).substring(2, 9)}`,
+              name: product.name || "Azure服务",
+              quantity: typeof product.quantity === 'number' ? product.quantity : 
+                      (parseInt(product.quantity) || 1)
+            };
+            return processedProduct;
+          });
+        }
+        
+        console.log('[Chat] 处理后的推荐方案:', recommendation);
+        
+        // 设置推荐方案状态
+        setRecommendedSolution(recommendation);
+        
+        // 根据推荐方案名称自动推断业务类型和规模（如果尚未设置）
+        if (!businessType || !businessScale) {
+          if (recommendation.name.includes('数据分析') || recommendation.name.includes('数据处理')) {
+            setBusinessType('data');
+          } else if (recommendation.name.includes('Web') || recommendation.name.includes('网站')) {
+            setBusinessType('web');
+          }
+          
+          if (recommendation.name.includes('基础') || recommendation.name.includes('小型')) {
+            setBusinessScale('small');
+          } else if (recommendation.name.includes('标准') || recommendation.name.includes('中型')) {
+            setBusinessScale('medium');
+          }
+        }
+      } catch (error) {
+        console.error('[Chat] 处理推荐方案时出错:', error);
+        // 错误时不更新状态，保持现有推荐方案
+      }
+    }
+    
+    // 处理建议问题
+    if (data.suggestions) {
+      try {
+        // 确保建议是一个数组
+        if (Array.isArray(data.suggestions)) {
+          // 过滤掉空字符串，并限制最多显示5个建议
+          const processedSuggestions = data.suggestions
+            .filter((suggestion: any) => typeof suggestion === 'string' && suggestion.trim() !== '')
+            .slice(0, 5);
+          
+          console.log('[Chat] 处理后的建议问题:', processedSuggestions);
+          
+          // 设置建议问题状态
+          setSuggestions(processedSuggestions);
+        }
+      } catch (error) {
+        console.error('[Chat] 处理建议问题时出错:', error);
+        // 错误时清空建议列表
+        setSuggestions([]);
+      }
+    }
+    
+    // 处理对话ID
+    if (data.conversation_id) {
+      try {
+        const conversationId = data.conversation_id.toString();
+        setCurrentConversation(prev => prev ? {...prev, id: conversationId} : prev);
+      } catch (error) {
+        console.error('[Chat] 处理对话ID时出错:', error);
+      }
+    }
+  };
+  
   // 发送流式消息
   const sendStreamMessage = async (content: string) => {
     // 取消任何正在进行的流式响应
@@ -351,7 +435,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
           
           if (assistantMessageIndex !== -1) {
-            // 直接追加消息块，不插入额外内容
+            // 直接追加消息块，实现打字机效果
             updatedMessages[assistantMessageIndex] = {
               ...updatedMessages[assistantMessageIndex],
               content: updatedMessages[assistantMessageIndex].content + chunk
@@ -364,101 +448,110 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         });
       },
+      
+      onStructuredData: (data: any) => {
+        console.log('[Chat] 收到结构化数据:', data);
+        
+        // 尝试处理各种可能的响应格式
+        let processData = { ...data };
+        
+        // 尝试从嵌套JSON中提取数据
+        if (data.content && typeof data.content === 'string') {
+          try {
+            const contentJson = JSON.parse(data.content);
+            // 合并顶层数据和content中的数据
+            processData = { ...processData, ...contentJson };
+          } catch (e) {
+            console.error('[Chat] 解析嵌套JSON失败:', e);
+          }
+        }
+        
+        // 使用统一的处理函数处理结构化数据
+        processStructuredData(processData);
+      },
+      
       onComplete: (fullResponse: string) => {
         console.log('[Chat] 流式消息接收完成, 完整响应:', fullResponse);
         
         setStreaming(false);
         cancelStreamRef.current = null;
         
-        // 创建变量存储消息内容
-        let messageText = '';
-        
-        // 检查是否收到了JSON响应
-        try {
-          // 尝试解析顶层JSON
-          const jsonResponse = JSON.parse(fullResponse);
-          console.log('[Chat] 检测到JSON响应:', jsonResponse);
+        // 尝试清理最终显示的消息，移除任何JSON结构
+        setCurrentConversation(prevConversation => {
+          if (!prevConversation) return prevConversation;
           
-          // 首先检查是否需要解析content字段中的嵌套JSON
-          if (jsonResponse.content && typeof jsonResponse.content === 'string' && 
-              (jsonResponse.content.includes('"message"') || jsonResponse.content.includes('\"message\"'))) {
-            try {
-              // 尝试解析content字段中的JSON
-              const contentJson = JSON.parse(jsonResponse.content);
-              console.log('[Chat] 解析content中的JSON成功:', contentJson);
-              
-              // 从content中提取message
-              if (contentJson.message) {
-                messageText = contentJson.message;
-                console.log('[Chat] 从content中提取到message:', messageText);
+          const updatedMessages = [...prevConversation.messages];
+          const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
+          
+          if (assistantMessageIndex !== -1) {
+            const currentContent = updatedMessages[assistantMessageIndex].content;
+            let cleanedContent = currentContent;
+            
+            // 检查内容是否是JSON或包含JSON
+            if (currentContent.trim().startsWith('{') && currentContent.includes('"message"')) {
+              try {
+                // 尝试解析为JSON并提取message
+                const jsonContent = JSON.parse(currentContent);
+                if (jsonContent.message) {
+                  // 替换为纯文本消息
+                  cleanedContent = jsonContent.message;
+                }
+              } catch (e) {
+                // 解析失败，可能只是部分JSON或格式不正确
+                // 尝试用正则表达式提取message字段
+                const messageMatch = currentContent.match(/"message"\s*:\s*"([\s\S]*?)(?:"|$)(?=\s*,|\s*})/);
+                if (messageMatch && messageMatch[1]) {
+                  // 替换为提取的消息
+                  cleanedContent = messageMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+                }
               }
-            } catch (contentError) {
-              console.error('[Chat] 解析content字段失败:', contentError);
+            }
+            
+            // 更新消息内容
+            updatedMessages[assistantMessageIndex] = {
+              ...updatedMessages[assistantMessageIndex],
+              content: cleanedContent
+            };
+          }
+          
+          return {
+            ...prevConversation,
+            messages: updatedMessages
+          };
+        });
+        
+        // 尝试从完整响应中解析结构化数据
+        try {
+          let jsonResponse;
+          if (fullResponse.startsWith('{')) {
+            jsonResponse = JSON.parse(fullResponse);
+          } else if (fullResponse.includes('{') && fullResponse.includes('}')) {
+            // 尝试提取JSON部分
+            const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              jsonResponse = JSON.parse(jsonMatch[0]);
             }
           }
           
-          // 如果内层没有找到消息，检查顶层是否有message字段
-          if (!messageText && jsonResponse.message) {
-            messageText = jsonResponse.message;
-            console.log('[Chat] 从顶层提取到message:', messageText);
+          if (jsonResponse) {
+            console.log('[Chat] 从完整响应中提取到JSON:', jsonResponse);
+            streamHandler.onStructuredData?.(jsonResponse);
           }
-          
-          // 如果仍然没有找到message，尝试使用content字段直接作为消息
-          if (!messageText && jsonResponse.content && typeof jsonResponse.content === 'string') {
-            messageText = jsonResponse.content;
-            console.log('[Chat] 使用content作为message:', messageText);
-          }
-          
-          // 确保有消息内容才更新UI
-          if (messageText) {
-            console.log('[Chat] 使用最终消息文本更新UI:', messageText);
-            
-            // 更新消息内容
-            setCurrentConversation(prevConversation => {
-              if (!prevConversation) return prevConversation;
-              
-              const updatedMessages = [...prevConversation.messages];
-              const assistantMessageIndex = updatedMessages.findIndex(m => m.id === assistantMessageId);
-              
-              if (assistantMessageIndex !== -1) {
-                updatedMessages[assistantMessageIndex] = {
-                  ...updatedMessages[assistantMessageIndex],
-                  content: messageText
-                };
-              }
-              
-              return {
-                ...prevConversation,
-                ...(jsonResponse.conversation_id ? { id: jsonResponse.conversation_id } : {}),
-                messages: updatedMessages
-              };
-            });
-          }
-          
-          // 处理其他响应数据（推荐、建议等）
-          handleRecommendationResponse(jsonResponse);
-          
-          // 更新对话列表
-          const finalAssistantMessage = {
-            ...assistantMessage,
-            content: jsonResponse.message || fullResponse
-          };
-          
-          updateConversationsList(updatedConversation.id, updatedConversation, finalAssistantMessage);
-          
         } catch (e) {
-          // 不是JSON，可能是纯文本响应
-          console.log('[Chat] 非JSON响应，保持当前消息内容');
-          
-          // 更新对话列表
-          const finalAssistantMessage = {
+          console.log('[Chat] 完整响应解析JSON失败:', e);
+        }
+        
+        // 更新对话列表 - 使用清理后的消息
+        setTimeout(() => {
+          const cleanedAssistantMessage = {
             ...assistantMessage,
-            content: fullResponse
+            content: currentConversation?.messages.find(m => m.id === assistantMessageId)?.content || ''
           };
           
-          updateConversationsList(updatedConversation.id, updatedConversation, finalAssistantMessage);
-        }
+          updateConversationsList(updatedConversation.id, updatedConversation, cleanedAssistantMessage);
+        }, 50); // 短暂延时确保状态已更新
       },
+      
       onError: (error: Error) => {
         console.error('[Chat] 流式消息处理错误:', error);
         
@@ -616,53 +709,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ));
     } catch (err) {
       setError(err instanceof Error ? err.message : '更新对话标题失败');
-    }
-  };
-
-  // handleRecommendationResponse函数
-  const handleRecommendationResponse = (jsonResponse: any): string => {
-    try {
-      // 确保我们在处理字符串
-      const data = typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse;
-      
-      // 提取文本消息
-      const messageText = data.message || '';
-      
-      // 处理推荐方案
-      if (data.recommendation) {
-        setRecommendedSolution({
-          name: data.recommendation.name,
-          description: data.recommendation.description,
-          products: data.recommendation.products.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            quantity: p.quantity
-          }))
-        });
-        
-        // 根据推荐自动设置业务类型和规模
-        if (data.recommendation.name.includes('数据分析')) {
-          setBusinessType('data');
-          setBusinessScale(data.recommendation.name.includes('初步') ? 'small' : 'medium');
-        } else if (data.recommendation.name.includes('Web')) {
-          setBusinessType('web');
-          setBusinessScale(data.recommendation.name.includes('初步') ? 'small' : 'medium');
-        }
-      }
-      
-      // 处理建议问题
-      if (data.suggestions && Array.isArray(data.suggestions)) {
-        setSuggestions(data.suggestions);
-      } else {
-        setSuggestions([]);
-      }
-      
-      // 返回消息文本，用于显示在聊天界面
-      return messageText;
-    } catch (err) {
-      console.error('[Chat] 处理推荐响应失败:', err);
-      setSuggestions([]);
-      return typeof jsonResponse === 'string' ? jsonResponse : JSON.stringify(jsonResponse);
     }
   };
   

@@ -3,8 +3,6 @@ import AIMessage from './AIMessage';
 import UserMessage from './UserMessage';
 import ThinkingAnimation from './ThinkingAnimation';
 import QuickReplyOptions from './QuickReplyOptions';
-import RecommendationCard from './RecommendationCard';
-import SuggestionChips from './SuggestionChips'; // 新增
 import { AzureSolution, BusinessType, BusinessScale } from '../../types';
 import { useChatContext } from '../../context/ChatContext';
 
@@ -29,7 +27,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   streaming,
   applySolution
 }) => {
-  const { currentConversation, suggestions, sendSuggestion } = useChatContext(); // 更新
+  const { currentConversation, suggestions, sendSuggestion } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const businessTypeOptions = [
@@ -50,33 +48,36 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   // 当消息发生变化或者正在流式响应时滚动到底部
   useEffect(() => {
     scrollToBottom();
-  }, [currentConversation, streaming, suggestions]); // 添加suggestions依赖
+  }, [currentConversation, streaming, suggestions, recommendedSolution]);
 
   // 如果有对话历史，则显示历史消息
   if (currentConversation && currentConversation.messages.length > 0) {
     return (
       <div className="flex-1 p-4 overflow-y-auto flex flex-col space-y-4" style={{height: '400px'}}>
-        {currentConversation.messages.map((message) => (
-          message.role === 'assistant' ? (
-            <AIMessage key={message.id} isStreaming={streaming && message === currentConversation.messages[currentConversation.messages.length - 1]}>
-              <p>{message.content}</p>
+        {currentConversation.messages.map((message, index) => {
+          // 最后一条AI消息展示推荐和建议
+          const isLastAIMessage = message.role === 'assistant' && 
+            index === currentConversation.messages.length - 1;
+          
+          return message.role === 'assistant' ? (
+            <AIMessage 
+              key={message.id} 
+              isStreaming={streaming && message === currentConversation.messages[currentConversation.messages.length - 1]}
+              recommendation={isLastAIMessage ? recommendedSolution : null}
+              suggestions={isLastAIMessage && !streaming ? suggestions : []}
+              applySolution={applySolution}
+              onSuggestionClick={sendSuggestion}
+            >
+              <p className="whitespace-pre-wrap">{message.content}</p>
             </AIMessage>
           ) : (
             <UserMessage key={message.id}>
               <p>{message.content}</p>
             </UserMessage>
-          )
-        ))}
+          );
+        })}
         
         {thinking && <ThinkingAnimation />}
-        
-        {/* 添加建议问题区域 */}
-        {!thinking && !streaming && suggestions.length > 0 && (
-          <SuggestionChips 
-            suggestions={suggestions} 
-            onSuggestionClick={sendSuggestion}
-          />
-        )}
         
         <div ref={messagesEndRef} />
       </div>
@@ -100,14 +101,13 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
         />
       )}
       
-      {/* 用户选择的业务类型 */}
+      {/* 显示用户选择和AI响应 */}
       {businessType && (
         <UserMessage>
           <p>我的业务类型是: {businessType === 'web' ? 'Web应用开发' : '数据处理与分析'}</p>
         </UserMessage>
       )}
       
-      {/* AI响应业务类型 */}
       {businessType && !businessScale && (
         <>
           <AIMessage>
@@ -122,34 +122,23 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
         </>
       )}
       
-      {/* 用户选择的业务规模 */}
       {businessType && businessScale && (
         <UserMessage>
           <p>我的业务规模是: {businessScale === 'small' ? '小型 (1-50 用户)' : '中型 (51-200 用户)'}</p>
         </UserMessage>
       )}
       
-      {/* AI思考中动画 */}
       {businessType && businessScale && thinking && <ThinkingAnimation />}
       
-      {/* AI推荐方案结果 */}
       {recommendedSolution && (
-        <AIMessage>
-          <p className="mb-2">根据你的需求，我为你定制了这个解决方案：</p>
-          <RecommendationCard 
-            recommendation={recommendedSolution} 
-            onApply={applySolution}
-          />
-          <p className="mt-3">这个方案能满足你的需求吗？你也可以在应用后在产品计算器中进一步调整。</p>
-        </AIMessage>
-      )}
-      
-      {/* 建议问题区域 */}
-      {!thinking && suggestions.length > 0 && (
-        <SuggestionChips 
-          suggestions={suggestions} 
+        <AIMessage 
+          recommendation={recommendedSolution}
+          applySolution={applySolution}
+          suggestions={suggestions}
           onSuggestionClick={sendSuggestion}
-        />
+        >
+          <p className="mb-2">根据你的需求，我为你定制了这个解决方案：</p>
+        </AIMessage>
       )}
       
       <div ref={messagesEndRef} />

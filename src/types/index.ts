@@ -52,14 +52,6 @@ export interface ConversationSummary {
   updatedAt: Date;
 }
 
-// 后端API响应类型
-export interface ChatAPIResponse {
-  message: string;
-  recommendation?: AzureSolution;
-  suggestions?: string[];
-  conversation_id?: string;
-}
-
 // API相关类型定义
 export interface MessageRequest {
   content: string;
