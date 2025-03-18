@@ -1,5 +1,3 @@
-// src/services/api.ts
-
 import { 
   MessageRequest, 
   MessageResponse, 
@@ -64,28 +62,52 @@ export interface StreamHandler {
   onComplete: (fullResponse: string) => void;
   onError: (error: Error) => void;
   onStructuredData?: (data: any) => void; // 处理结构化数据(推荐、建议等)
+  onConversationId?: (conversationId: string) => void; // 单独处理会话ID的回调
 }
 
 // 聊天API服务
 export const chatApi = {
   // 发送消息
   sendMessage: async (message: MessageRequest): Promise<MessageResponse> => {
+    // 创建修正的请求对象
+    const correctedMessage = {
+      content: message.content,
+      conversation_id: message.conversationId,
+      conversationId: message.conversationId,
+      context: message.context || {}
+    };
+    
     const response = await fetch(`${API_BASE_URL}/chat/messages/`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(message)
+      body: JSON.stringify(correctedMessage)
     });
     
-    return handleResponse<MessageResponse>(response);
+    const responseData = await handleResponse<MessageResponse>(response);
+    console.log("DEBUG - 收到响应，conversationId:", responseData.conversationId);
+    return responseData;
   },
   
   // 修改sendMessageStream函数中的处理逻辑
   sendMessageStream: (message: MessageRequest, handler: StreamHandler): () => void => {
-    let fullResponse = '';
-    let abortController = new AbortController();
-    let buffer = ''; // 用于存储收到的数据块
+    // 添加特殊调试日志，检查参数名称
+    console.log('[API-DEBUG] 请求参数检查:', message);
+    console.log('[API-DEBUG] conversationId 参数存在:', message.hasOwnProperty('conversationId'));
     
-    console.log('[API] 开始发送流式消息请求:', message);
+    const correctedMessage = {
+      content: message.content,
+      // 同时传递两种格式，确保至少一个能被后端识别
+      conversation_id: message.conversationId,
+      conversationId: message.conversationId,
+      context: message.context || {}
+    };
+    
+    console.log('[API-DEBUG] 修正后的请求参数:', correctedMessage);let fullResponse = '';
+    let abortController = new AbortController();
+    let buffer = '';
+    
+    // 明确记录请求信息，特别是会话ID
+    console.log('[API] 发送流式消息请求:', message, '会话ID:', message.conversationId);
     
     // 开始流式请求
     (async () => {
@@ -93,7 +115,7 @@ export const chatApi = {
         const response = await fetch(`${API_BASE_URL}/chat/messages/stream`, {
           method: 'POST',
           headers: getAuthHeaders(),
-          body: JSON.stringify(message),
+          body: JSON.stringify(correctedMessage),
           signal: abortController.signal
         });
         
@@ -146,44 +168,24 @@ export const chatApi = {
                 try {
                   const jsonData = JSON.parse(content);
                   
+                  if (jsonData.conversation_id) {
+                    console.log('[API] 从流式响应中提取到会话ID:', jsonData.conversation_id);
+                    // 调用专门处理会话ID的回调
+                    handler.onConversationId?.(jsonData.conversation_id);
+                  }
+                  
                   // 提取消息文本部分并发送（仅在有文本内容时）
                   const hasTextContent = extractAndSendMessageText(jsonData, handler);
                   
                   // 如果有结构化数据，单独处理
-                  if (jsonData.recommendation || jsonData.suggestions || 
-                      (jsonData.content && jsonData.content.includes('"recommendation"'))) {
+                  if (jsonData.recommendation || jsonData.suggestions) {
                     handler.onStructuredData?.(jsonData);
-                  }
-                  
-                  // 如果既没有文本也没有结构化数据，尝试把内容当作普通文本处理
-                  if (!hasTextContent && !jsonData.recommendation && !jsonData.suggestions) {
-                    try {
-                      // 尝试检查内容是否仍然包含嵌套的消息
-                      if (typeof content === 'string' && content.includes('"message"')) {
-                        const messageMatch = content.match(/"message"\s*:\s*"([^"]*)"/);
-                        if (messageMatch && messageMatch[1]) {
-                          handler.onChunk(messageMatch[1]);
-                        }
-                      }
-                    } catch (e) {
-                      console.error('[API] 尝试提取消息失败:', e);
-                    }
                   }
                 } catch (jsonError) {
                   // 如果不是有效的JSON，直接发送原始内容
-                  // 但先检查是否包含JSON结构，避免显示原始JSON
-                  if (!content.startsWith('{') || !content.includes('"message"')) {
+                  console.error('[API] JSON解析错误:', jsonError);
+                  if (!content.startsWith('{')) {
                     handler.onChunk(content);
-                  } else {
-                    // 尝试提取message字段
-                    try {
-                      const messageMatch = content.match(/"message"\s*:\s*"([^"]*)"/);
-                      if (messageMatch && messageMatch[1]) {
-                        handler.onChunk(messageMatch[1]);
-                      }
-                    } catch (e) {
-                      // 提取失败，不发送任何内容
-                    }
                   }
                 }
               } catch (e) {

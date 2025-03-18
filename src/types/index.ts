@@ -56,6 +56,7 @@ export interface ConversationSummary {
 export interface MessageRequest {
   content: string;
   conversationId?: string;
+  context?: string;
 }
 
 export interface MessageResponse {

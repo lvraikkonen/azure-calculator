@@ -23,6 +23,10 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ setSelectedProducts, setActiveTab
     currentConversation,
     createNewConversation
   } = useChatContext();
+
+  useEffect(() => {
+    console.log('[AIAdvisor] 当前会话ID:', currentConversation?.id);
+  }, [currentConversation?.id]);
   
   // 组件挂载时初始化对话（如果还没有）
   useEffect(() => {

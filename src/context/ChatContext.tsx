@@ -82,6 +82,26 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // 建议问题状态
   const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  // 加载保存的会话
+  useEffect(() => {
+    const savedConversationId = localStorage.getItem('current_conversation_id');
+    if (savedConversationId) {
+      console.log('[Chat] 从本地存储加载会话:', savedConversationId);
+      loadConversation(savedConversationId).catch(() => {
+        localStorage.removeItem('current_conversation_id');
+        createNewConversation();
+      });
+    }
+  }, []); // 仅在组件挂载时执行一次
+
+  // 保存当前会话ID
+  useEffect(() => {
+    if (currentConversation?.id) {
+      console.log('[Chat] 保存会话ID到本地存储:', currentConversation.id);
+      localStorage.setItem('current_conversation_id', currentConversation.id);
+    }
+  }, [currentConversation?.id]);
   
   // 监听API使用首选项变化
   useEffect(() => {
@@ -192,6 +212,22 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setLoading(false);
     }
+  };
+
+  // 添加统一的会话ID更新函数
+  const updateConversationId = (newId: string) => {
+    if (!newId) return;
+    
+    console.log('[Chat] 更新会话ID:', newId);
+    
+    // 统一更新当前会话ID
+    setCurrentConversation(prevConversation => {
+      if (!prevConversation) return prevConversation;
+      return {
+        ...prevConversation,
+        id: newId
+      };
+    });
   };
   
   // 发送普通消息
@@ -448,6 +484,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         });
       },
+
+      onConversationId: (conversationId: string) => {
+        console.log('[Chat] 收到流式消息中的会话ID:', conversationId);
+        updateConversationId(conversationId);
+      },
       
       onStructuredData: (data: any) => {
         console.log('[Chat] 收到结构化数据:', data);
@@ -548,7 +589,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             content: currentConversation?.messages.find(m => m.id === assistantMessageId)?.content || ''
           };
           
-          updateConversationsList(updatedConversation.id, updatedConversation, cleanedAssistantMessage);
+          const finalConversationId = currentConversation?.id || updatedConversation.id;
+          updateConversationsList(finalConversationId, updatedConversation, cleanedAssistantMessage);
         }, 50); // 短暂延时确保状态已更新
       },
       
@@ -602,10 +644,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       // 使用实际流式API
       try {
-        console.log('[Chat] 调用实际流式API');
+        console.log('[Chat] 调用实际流式API，使用会话ID:', currentConversation?.id);
         cancelStreamRef.current = chatApi.sendMessageStream({
           content,
-          conversationId: currentConversation?.id
+          conversationId: currentConversation?.id  // 确保会话ID传递
         }, streamHandler);
       } catch (err) {
         console.error('[Chat] 调用流式API初始化失败:', err);
