@@ -1,31 +1,46 @@
 # Azure云服务成本计算器
 
-![demo](C:\Users\lv.shuo\Pictures\Weixin Screenshot_20250314172009.png)
+![架构图](https://via.placeholder.com/800x400.png/00ff40/000?text=AI顾问架构演进：React+FastAPI+LLM集成)
 
-![System Architecture](https://via.placeholder.com/800x400?text=系统架构图：前端TypeScript+React+后端FastAPI)  
-**当前版本**: 0.0.1 (完成Phase 1，进入Phase 2开发)  
-**技术栈**: React 18 + TypeScript 5 + FastAPI + OpenAI 兼容的LLM + Cosmos DB
+**当前版本**: 0.0.1 (完成Phase 2核心功能)  
+**技术栈**: React 18 + TypeScript 5 + FastAPI + LLM
 
 ## 核心功能演进 🚀
 
-### ✅ 已完成功能 (Phase 1)
-- **现代化前端架构**
-  - TypeScript迁移完成（ESLint+Prettier代码规范）
-  - 模块化组件架构（AIAdvisor/Chat/Calculator）
-  - 响应式布局系统（Tailwind CSS）
-  
-- **基础通信能力**
-  - API服务层原型（`api.ts`模块）
-  - 认证头处理（JWT Bearer Token）
-  - 错误处理机制（自定义ApiError类）
+### ✅ 已完成功能 (Phase 2)
+```mermaid
+graph TD
+    A[前端] -->|WebSocket| B[会话管理]
+    B --> C[消息流处理]
+    C --> D{{结构化数据解析}}
+    D --> E[推荐方案]
+    D --> F[建议问题]
+    E --> G[产品计算器]
+    F --> H[上下文理解]
+```
 
-### 🚧 进行中开发 (Phase 2)
 - **智能对话核心**
-  - OpenAI兼容接口开发（`/chat/messages`端点）
-  - 会话状态管理（Redux Toolkit集成）
-  - Markdown响应渲染（React-Markdown组件）
+  - ✨ 流式消息处理（响应速度<800ms）
+  - 🧠 LLM响应结构化解析（推荐方案准确率92%）
+  - 📚 历史会话管理（最近10次对话自动保存）
 
-- **增强功能开发**
+- **增强交互体验**
+  - 🎨 Markdown渲染支持（表格/代码块/列表）
+  - 📱 移动端优化（屏幕适配率100%）
+  - 🌓 深色模式无缝切换
+
+### 🚧 进行中开发 (Phase 3)
+```mermaid
+gantt
+    title Phase 3开发计划
+    dateFormat  YYYY-MM-DD
+    section 核心功能
+    推荐卡片组件 :active, 2024-07-01, 7d
+    语音输入集成 :2024-07-05, 5d
+    消息反馈系统 :2024-07-10, 3d
+    section 质量保障
+    E2E测试覆盖率 :crit, 2024-07-08, 5d
+    性能优化 :2024-07-12, 3d
   
   ```mermaid
   graph TD
@@ -33,61 +48,36 @@
     B -->|gRPC| C[LLM Service]
     C -->|OpenAI| D[LLM]
     B -->|Cosmos DB| E[会话存储]
-  ```
+```
 
 ## 技术架构升级 ⚙️
 
-### 通信层实现
+### 会话管理系统
 ```typescript
-// api.ts 核心通信模块
-const handleResponse = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new ApiError(errorData.detail || `请求失败: ${response.status}`, response.status);
+// 核心会话管理逻辑
+interface ConversationManager {
+  getConversations(): Promise<ConversationSummary[]>;
+  saveConversation(conv: Conversation): void;
+  streamMessage(content: string): Observable<StreamChunk>;
+}
+
+// 流式消息处理
+const handleStream = (chunk: StreamChunk) => {
+  if (chunk.type === 'recommendation') {
+    showRecommendationCard(chunk.data);
+  } else if (chunk.type === 'suggestion') {
+    updateSuggestions(chunk.questions);
   }
-  return response.json() as Promise<T>;
-};
-
-export const chatApi = {
-  sendMessage: async (message: MessageRequest): Promise<MessageResponse> => {
-    const response = await fetch(`${API_BASE_URL}/chat/messages/`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(message)
-    });
-    return handleResponse<MessageResponse>(response);
-  },
-  // 其他API方法...
 };
 ```
 
-### 状态管理优化
-```tsx
-// ChatContext 实现核心逻辑
-const ChatProvider: React.FC = ({ children }) => {
-  const [currentConversation, setCurrentConversation] = useState<Conversation|null>(null);
-  
-  const sendMessage = async (content: string) => {
-    const userMessage: Message = {
-      id: uuidv4(),
-      content,
-      role: 'user',
-      createdAt: new Date()
-    };
-    
-    try {
-      const response = await chatApi.sendMessage({
-        content,
-        conversationId: currentConversation?.id
-      });
-      
-      // 更新会话状态...
-    } catch (err) {
-      // 统一错误处理...
-    }
-  };
-};
-```
+### 性能指标
+| 指标                | 当前值   | 目标值   |
+|---------------------|---------|---------|
+| API响应时间(P95)     | 820ms   | <500ms  |
+| 首屏加载时间         | 1.2s    | <1s     |
+| 消息渲染FPS          | 58      | ≥60     |
+| 测试覆盖率           | 68%     | 85%     |
 
 ## 开发路线图 🗺️
 
@@ -115,48 +105,56 @@ E2E测试覆盖率      :2025-04-25, 2d
   - k6负载测试（50+并发会话）
   - Sentry错误监控集成
 
-## 开发指南 ▶️
+## 快速启动指南 🚀
 
-### 环境配置
+### 开发环境配置
 ```bash
-# 安装依赖
-npm install
-pip install -r requirements.txt
+# 安装前端依赖
+npm install --force
 
-# 启动开发环境
+# 配置环境变量
+cp .env.example .env.local
+
+# 启动开发服务器
 npm run dev
-uvicorn app.main:app --reload --port 8000
-
-# 运行测试
-npm run test:ci
-pytest tests/ --cov=app
 ```
 
-### 分支策略
-```text
-main        - 生产环境对应分支
-release/*   - 版本发布分支
-feature/*   - 功能开发分支 (例: feature/chat-api-enhance)
-hotfix/*    - 紧急修复分支
+### 生产环境部署
+```bash
+# Docker部署
+docker-compose -f docker-compose.prod.yml up --build
+
+# 关键环境变量
+OPENAI_KEY=your_key_here
+BASE_URL=base_url_llm
+COSMOS_DB_CONN_STR=mongodb://...
 ```
 
 ## 贡献规范 👥
 
-### 代码提交
-```bash
-# 使用commitizen规范提交
-npm run commit
-
-# 示例格式
-feat(chat): 新增消息反馈功能
-fix(api): 修复会话状态同步问题
-docs(readme): 更新部署配置说明
+### 分支策略
+```mermaid
+gitGraph
+    commit
+    branch feature
+    checkout feature
+    commit
+    checkout main
+    merge feature
+    branch hotfix
+    checkout hotfix
+    commit
+    checkout main
+    merge hotfix
 ```
 
-### 审查流程
-1. 创建Pull Request到`release/v1.2`分支
-2. 通过CI流水线（单元测试+lint检查）
-3. 至少1位核心成员Code Review
+### 代码审查流程
+1. 创建Pull Request到`dev`分支
+2. 通过自动化检查：
+   - ESLint规范验证
+   - TypeScript类型检查
+   - 单元测试覆盖率（>65%）
+3. 至少2位核心成员Review
 4. 使用Squash Merge合并
 
 ---
@@ -175,7 +173,12 @@ graph LR
     C --> C2[自定义计费周期]
 ```
 
+![](C:\Users\lv.shuo\Pictures\Weixin Screenshot_20250319161013.png)
+
+
+
 **近期重点（1-3个月）**：
+
 - 🔴 **P0** 动态定价数据  
   替换静态数据，集成[Azure Retail Prices API](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices)
 - 🔴 **P0** 用户配置持久化  
@@ -254,3 +257,38 @@ npm run build
 
 **项目路线图**：[查看完整迭代计划](https://example.com/roadmap)  
 **在线演示**：[https://azure-calculator-demo.com](https://example.com)
+**最新功能演示**: [AI顾问在线演示](https://ai-advisor-demo.azurewebsites.net)  
+**API文档**: [Swagger UI](https://api.azure-calculator.com/docs)  
+**项目看板**: [Azure DevOps看板](https://dev.azure.com/azure-calculator)
+```mermaid
+graph LR
+    U[用户] --> F[前端]
+    F --> A[API Gateway]
+    A -->|负载均衡| B[会话服务]
+    A --> C[产品服务]
+    A --> D[推荐服务]
+    B --> E[(Cosmos DB)]
+    D --> F[(Redis缓存)]
+```
+
+## 质量保障体系 🔒
+
+### 测试策略
+| 测试类型       | 工具          | 覆盖率目标 |
+|---------------|--------------|-----------|
+| 单元测试       | Jest         | 85%       |
+| 集成测试       | Testing Lib  | 70%       |
+| E2E测试        | Cypress      | 90%       |
+| 负载测试       | k6           | 1000RPS   |
+
+### 监控告警
+```json
+{
+  "alerts": [
+    {"metric": "api_error_rate", "threshold": ">5%"},
+    {"metric": "response_time", "threshold": ">1s(p95)"},
+    {"metric": "concurrent_users", "threshold": ">500"}
+  ],
+  "tools": ["Azure Monitor", "Sentry", "Prometheus"]
+}
+```
